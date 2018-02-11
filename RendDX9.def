@@ -1,0 +1,5 @@
+LIBRARY	"RendDX9"
+
+EXPORTS
+		initDll=RendDX9_ori.initDll
+		deinitDll=RendDX9_ori.deinitDll
