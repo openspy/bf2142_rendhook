@@ -42,9 +42,47 @@ void patchSSL() {
 	VirtualProtect(instruction_address, instruction_length, old, &old);
 	FlushInstructionCache(GetCurrentProcess(), instruction_address, instruction_length);
 }
+void patchErrorNeg206() {
+	const char *update_string = "\xEB\x2E\x90";
+	int instruction_length = 3;
+	void *instruction_address = (void *)0x833F7F;
+	DWORD old;
+	VirtualProtect(instruction_address, instruction_length, PAGE_EXECUTE_READWRITE, &old);
+	WriteProcessMemory(GetCurrentProcess(), instruction_address, update_string, instruction_length, NULL);
+
+	VirtualProtect(instruction_address, instruction_length, old, &old);
+	FlushInstructionCache(GetCurrentProcess(), instruction_address, instruction_length);
+}
+void patchDeleteSoldierHang() {
+	//patch infinite loop of waiting for findnextfile to fail...???
+	int instruction_length = 6;
+	void *instruction_address = (void *)0x69F7CD;
+	const char *update_string = "\x90\x90\x90\x90\x90\x90";
+	DWORD old;
+	VirtualProtect(instruction_address, instruction_length, PAGE_EXECUTE_READWRITE, &old);
+	WriteProcessMemory(GetCurrentProcess(), instruction_address, update_string, instruction_length, NULL);
+
+	VirtualProtect(instruction_address, instruction_length, old, &old);
+	FlushInstructionCache(GetCurrentProcess(), instruction_address, instruction_length);
+}
 #define BASE_ADDRESS 0x400000
 static int patched = false;
 const char *fesl_hostname = "fesl.openspy.net";
+
+int debugPrint(int arg0, int arg4, char *fmt, ...) {
+
+	char buffer[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsprintf(buffer, fmt, args);
+	OutputDebugStringA(buffer);
+	va_end(args);
+	return 0;
+}
+
+int FESL_ResolveHandler(void *this_ptr, const char *ea_gamename, int a3, const char *a4, int a5, int a6) {
+	return 0;
+}
 
 //HMODULE original_dll;
 BOOL WINAPI DllMain(
@@ -61,6 +99,15 @@ BOOL WINAPI DllMain(
 			if (!patched) {
 				patched = true;
 
+				void *fesldebugFuncAddr = (void *)0x009C11DC;
+				void *debugPrintAddr = (void *)debugPrint;
+
+				VirtualProtect(fesldebugFuncAddr, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
+				WriteProcessMemory(GetCurrentProcess(), fesldebugFuncAddr, &debugPrintAddr, sizeof(void *), NULL);
+
+				VirtualProtect(fesldebugFuncAddr, sizeof(void *), old, &old);
+				FlushInstructionCache(GetCurrentProcess(), fesldebugFuncAddr, sizeof(void *));
+				
 
 				//OutputDebugString("Patching hostnames...\n");
 
@@ -80,9 +127,9 @@ BOOL WINAPI DllMain(
 				patchString(sGameSpyInfo.sb_wildcard, "%s.ms%d.openspy.net");
 				patchString(sGameSpyInfo.qr_wildcard, "%s.master.openspy.net");
 
-				patchString(sGameSpyInfo.gpsp, "bfsp.openspy.net");
-				patchString(sGameSpyInfo.gpcm, "bfcm.openspy.net");
-				patchString(sGameSpyInfo.gamestats, "bfpcstats.openspy.net");
+				patchString(sGameSpyInfo.gpsp, "gpsp.openspy.net");
+				patchString(sGameSpyInfo.gpcm, "gpcm.openspy.net");
+				patchString(sGameSpyInfo.gamestats, "gamestats.openspy.net");
 
 				//.rdata:009645A4 00000020 C http://stella.prod.gamespy.com/
 				patchString(sGameSpyInfo.stella_hostname, "stella.prod.openspy.net");
@@ -99,7 +146,8 @@ BOOL WINAPI DllMain(
 				patchString((char *)0x9C5C78, "net");
 
 				patchSSL();
-				
+				patchErrorNeg206();
+				patchDeleteSoldierHang();
 
 
 				VirtualProtect((void *)sGameSpyInfo.fesl_dns_address, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
