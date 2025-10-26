@@ -141,6 +141,7 @@
     <None Include="RendDX9.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="cabundle.h" />
     <ClInclude Include="CDetour.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

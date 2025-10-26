@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <openssl/ssl.h>
+#include "cabundle.h"
 
 #define SERVER_HOSTNAME "fesl.openspy.net"
 #define SERVER_PORT 18301
@@ -240,8 +241,29 @@ void install_fesl_patches() {
 	SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_2_VERSION);
 	//SSL_CTX_set_max_proto_version(g_ssl_ctx, TLS1_3_VERSION);
 
-	//SSL_CTX_set_default_verify_paths(g_ssl_ctx);
-	SSL_CTX_load_verify_store(g_ssl_ctx, "org.openssl.winstore://");
+	//setup CA store
+	X509_STORE* store = X509_STORE_new();
+	X509_STORE_set_default_paths(store); //load default openssl cas
+	X509_STORE_load_store(store, "org.openssl.winstore://"); //load certs trusted by windows
+
+	//add sectigo root chain... as R46,DVR36 are currently not in the windows cert store...
+	const unsigned char* ca_bundle = CA_USERTRUST;
+	X509* ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_USERTRUST));
+	X509_STORE_add_cert(store, ca_cert);
+	X509_free(ca_cert);
+
+	ca_bundle = CA_SECTIGO_R46;
+	ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_SECTIGO_R46));
+	X509_STORE_add_cert(store, ca_cert);
+	X509_free(ca_cert);
+
+	ca_bundle = CA_SECTIGO_DVR36;
+	ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_SECTIGO_DVR36));
+	X509_STORE_add_cert(store, ca_cert);
+	X509_free(ca_cert);
+
+	SSL_CTX_set_cert_store(g_ssl_ctx, store);
+	//
 
 	SSL_CTX_set_cipher_list(g_ssl_ctx, "ALL");
 	SSL_CTX_set_options(g_ssl_ctx, SSL_OP_ALL);
