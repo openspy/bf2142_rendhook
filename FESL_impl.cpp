@@ -36,7 +36,6 @@ typedef struct _SOCKET_Handler {
 	int (*unk_callback_2)(struct _SOCKET_Handler*);
 	int (*unk_callback_3)(struct _SOCKET_Handler*);
 	int (*unk_callback_4)(struct _SOCKET_Handler*);
-	uint8_t test[32];
 } SOCKETHandler;
 
 typedef struct _FESLSOCKET {
@@ -144,21 +143,8 @@ int SSL_LogicThread(FESLCtx* ctx) {
 		}
 	}
 	else if (ctx->connection_state == 4) { //init SSL connection
-		if (g_ssl != NULL) {
-			SSL_free(g_ssl);
-		}
-		g_ssl = SSL_new(g_ssl_ctx);
-		g_read_bio = BIO_new(BIO_s_mem());
-		g_write_bio = BIO_new(BIO_s_mem());
-		BIO_set_nbio(g_read_bio, 1);
-		BIO_set_nbio(g_write_bio, 1);
+		SSL_clear(g_ssl);
 
-
-		SSL_set_tlsext_host_name(g_ssl, SERVER_HOSTNAME);
-		SSL_set1_host(g_ssl, SERVER_HOSTNAME);
-
-
-		SSL_set_bio(g_ssl, g_read_bio, g_write_bio);
 		SSL_set_connect_state(g_ssl);
 
 		ctx->connection_state = 5;
@@ -252,13 +238,23 @@ void install_fesl_patches() {
 
 	g_ssl_ctx = SSL_CTX_new(TLS_method());
 	//SSL_CTX_set_verify(g_ssl_ctx, SSL_VERIFY_PEER, NULL); //call this to enable verification
-	//SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_3_VERSION);
+	SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_2_VERSION);
 	//SSL_CTX_set_max_proto_version(g_ssl_ctx, TLS1_3_VERSION);
-
-
 
 	SSL_CTX_set_cipher_list(g_ssl_ctx, "ALL");
 	SSL_CTX_set_options(g_ssl_ctx, SSL_OP_ALL);
+
+	g_ssl = SSL_new(g_ssl_ctx);
+	g_read_bio = BIO_new(BIO_s_mem());
+	g_write_bio = BIO_new(BIO_s_mem());
+	BIO_set_nbio(g_read_bio, 1);
+	BIO_set_nbio(g_write_bio, 1);
+
+
+	SSL_set_tlsext_host_name(g_ssl, SERVER_HOSTNAME);
+	SSL_set1_host(g_ssl, SERVER_HOSTNAME);
+
+	SSL_set_bio(g_ssl, g_read_bio, g_write_bio);
 
 
 	DWORD old;
