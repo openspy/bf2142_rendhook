@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 #include <openssl/ssl.h>
-#include "cabundle.h"
 
 #define SERVER_HOSTNAME "fesl.openspy.net"
 #define SERVER_PORT 18301
