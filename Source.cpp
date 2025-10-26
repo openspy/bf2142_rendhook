@@ -4,6 +4,10 @@
 
 #define ORIGINAL_DLL "RendDX9_ori.dll"
 
+FILE* console_fd;
+
+void install_fesl_patches();
+
 struct {
 	char *gpcm;
 	char *gpsp;
@@ -21,6 +25,8 @@ struct {
 
 	char *stella_hostname;
 	char *stella_http_name;
+
+	char* gamespy_online_check;
 } sGameSpyInfo;
 
 void patchString(char *dstAddress, char *srcAddress) {
@@ -69,21 +75,6 @@ void patchDeleteSoldierHang() {
 static int patched = false;
 const char *fesl_hostname = "fesl.openspy.net";
 
-int debugPrint(int arg0, int arg4, char *fmt, ...) {
-
-	char buffer[1024];
-	va_list args;
-	va_start(args, fmt);
-	vsprintf(buffer, fmt, args);
-	OutputDebugStringA(buffer);
-	va_end(args);
-	return 0;
-}
-
-int FESL_ResolveHandler(void *this_ptr, const char *ea_gamename, int a3, const char *a4, int a5, int a6) {
-	return 0;
-}
-
 //HMODULE original_dll;
 BOOL WINAPI DllMain(
 	HINSTANCE hinstDLL,
@@ -98,16 +89,11 @@ BOOL WINAPI DllMain(
 		case DLL_THREAD_ATTACH:
 			if (!patched) {
 				patched = true;
+				AllocConsole();
+				console_fd = fopen("CONOUT$", "wb");
 
-				void *fesldebugFuncAddr = (void *)0x009C11DC;
-				void *debugPrintAddr = (void *)debugPrint;
-
-				VirtualProtect(fesldebugFuncAddr, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
-				WriteProcessMemory(GetCurrentProcess(), fesldebugFuncAddr, &debugPrintAddr, sizeof(void *), NULL);
-
-				VirtualProtect(fesldebugFuncAddr, sizeof(void *), old, &old);
-				FlushInstructionCache(GetCurrentProcess(), fesldebugFuncAddr, sizeof(void *));
 				
+				install_fesl_patches();
 
 				//OutputDebugString("Patching hostnames...\n");
 
@@ -123,6 +109,8 @@ BOOL WINAPI DllMain(
 				sGameSpyInfo.stella_hostname = (char *)(0x009645C4);
 				sGameSpyInfo.stella_http_name = (char *)(0x009645A4);
 
+				sGameSpyInfo.gamespy_online_check = (char*)0x00925424;
+
 				patchString(sGameSpyInfo.avail_wildcard, "%s.available.openspy.net");
 				patchString(sGameSpyInfo.sb_wildcard, "%s.ms%d.openspy.net");
 				patchString(sGameSpyInfo.qr_wildcard, "%s.master.openspy.net");
@@ -135,6 +123,9 @@ BOOL WINAPI DllMain(
 				patchString(sGameSpyInfo.stella_hostname, "stella.prod.openspy.net");
 				patchString(sGameSpyInfo.stella_http_name, "http://stella.prod.openspy.net");
 
+				//.rdata:00925424	0000000C	C	gamespy.com
+				patchString(sGameSpyInfo.gamespy_online_check, "openspy.net");
+
 				sGameSpyInfo.fesl_dns_address = (void **)0x833DB7;
 
 				sGameSpyInfo.fesl_base_domain = (void **)0x8342CA;
@@ -146,8 +137,8 @@ BOOL WINAPI DllMain(
 				patchString((char *)0x9C5C78, "net");
 
 				patchSSL();
-				patchErrorNeg206();
-				patchDeleteSoldierHang();
+				//patchErrorNeg206();
+				//patchDeleteSoldierHang();
 
 
 				VirtualProtect((void *)sGameSpyInfo.fesl_dns_address, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
