@@ -13,7 +13,7 @@
 
 SSL_CTX* g_ssl_ctx = NULL;
 
-SSL* g_ssl;
+SSL* g_ssl = NULL;
 BIO* g_read_bio;
 BIO* g_write_bio;
 
@@ -56,44 +56,6 @@ typedef struct _FESLCtx {
 	struct _SSLStateInfo* ssl_state;
 } FESLCtx;
 
-
-void show_dump(unsigned char* data, unsigned int len, FILE* stream) {
-	static const char       hex[] = "0123456789abcdef";
-	static unsigned char    buff[67];   /* HEX  CHAR\n */
-	unsigned char           chr,
-		* bytes,
-		* p,
-		* limit,
-		* glimit = data + len;
-
-	memset(buff + 2, ' ', 48);
-
-	while (data < glimit) {
-		limit = data + 16;
-		if (limit > glimit) {
-			limit = glimit;
-			memset(buff, ' ', 48);
-		}
-
-		p = buff;
-		bytes = p + 50;
-		while (data < limit) {
-			chr = *data;
-			*p++ = hex[chr >> 4];
-			*p++ = hex[chr & 15];
-			p++;
-			*bytes++ = ((chr < ' ') || (chr >= 0x7f)) ? '.' : chr;
-			data++;
-		}
-		*bytes++ = '\n';
-
-		fwrite(buff, bytes - buff, 1, stream);
-	}
-}
-
-
-extern FILE* console_fd;
-
 class IFESL {
 public:
 	virtual void unknownFunc1(char a2) = 0;
@@ -114,42 +76,6 @@ public:
 		return real_fesl->setConnectionDetails(SERVER_HOSTNAME, SERVER_PORT, a6);
 	}
 };
-
-
-int spy_SSL_LogicThread(FESLCtx* ctx) {
-	int (*real_func)(FESLCtx*) = (int (*)(FESLCtx*))0x861190;
-	/*fprintf(console_fd, "SSL_LogicThread: %p\n", a1);
-	int *state = (int*)((int)a1 + 284);
-	fprintf(console_fd, "SSL state pre: %d\n", *state);
-	int r = real_func(a1);
-	fprintf(console_fd, "SSL_LogicThread post: %d, result: %d\n", *state, r);
-	fflush(console_fd);*/
-	
-	if (ctx->connection_state == 30) {
-		//fprintf(console_fd, "resolve address: %08x - %08x\n", ctx->resolved_address.sin_addr.S_un.S_addr, ctx->resolved_address.sin_port);
-		if (ctx->ssl_state->current_send_len) {
-			fprintf(console_fd, "SEND\n");
-			show_dump(&ctx->ssl_state->send_buffer[ctx->ssl_state->send_buffer_cursor], ctx->ssl_state->current_send_len - ctx->ssl_state->send_buffer_cursor, console_fd);
-			fflush(console_fd);
-		}
-	}
-	int r = real_func(ctx);
-	if (ctx->connection_state == 30) {
-		if (ctx->ssl_state->recv_current_len) {
-			fprintf(console_fd, "RECV\n");
-			show_dump(ctx->ssl_state->recv_buffer, ctx->ssl_state->recv_current_len, console_fd);
-			fflush(console_fd);
-		}
-		
-		
-	}
-	else {
-		fprintf(console_fd, "state: %d\n", ctx->connection_state);
-	}
-	fflush(console_fd);
-	return r;
-}
-
 
 void SSL_Flush(FESLCtx* ctx) {
 	int ssl_write_sz = BIO_pending(g_write_bio);
@@ -186,8 +112,6 @@ void SSL_Read(FESLCtx* ctx) {
 }
 
 int SSL_LogicThread(FESLCtx* ctx) {
-	fprintf(console_fd, "SSL_LogicThread: %d - %d\n", ctx->connection_state, ctx->fesl_socket->socket);
-	fflush(console_fd);
 	if (ctx->connection_state == 2) {
 		//unsigned long mode = 1; // 1 for non-blocking, 0 for blocking
 		//if (ioctlsocket(ctx->fesl_socket->socket, FIONBIO, &mode) != 0) {
@@ -196,16 +120,13 @@ int SSL_LogicThread(FESLCtx* ctx) {
 		//	ctx->got_error = 1;
 		//	return ctx->connection_state;
 		//}
-		fprintf(console_fd, "Changed to non-blocking\n");
 
 		ctx->connection_state = 3;
 	}
 	else if (ctx->connection_state == 3) { //need to do connection
 		int r = connect(ctx->fesl_socket->socket, (const sockaddr*)&ctx->resolved_address, sizeof(const sockaddr));
-		fprintf(console_fd, "connect: %d\n", r);
 		if (r < 0) {
 			int lastErr = WSAGetLastError();
-			fprintf(console_fd, "conn last err: %d\n", lastErr);
 			if (lastErr == WSAEWOULDBLOCK || lastErr == WSAEALREADY || lastErr == WSAEINVAL) {
 				return ctx->connection_state;
 			}
@@ -223,6 +144,9 @@ int SSL_LogicThread(FESLCtx* ctx) {
 		}
 	}
 	else if (ctx->connection_state == 4) { //init SSL connection
+		if (g_ssl != NULL) {
+			SSL_free(g_ssl);
+		}
 		g_ssl = SSL_new(g_ssl_ctx);
 		g_read_bio = BIO_new(BIO_s_mem());
 		g_write_bio = BIO_new(BIO_s_mem());
@@ -259,7 +183,7 @@ int SSL_LogicThread(FESLCtx* ctx) {
 		
 	}
 	else if (ctx->connection_state == 30) { //read SSL incoming data
-		int recvbuf[4096];
+		int recvbuf[256];
 		while (true) {
 			int r = recv(ctx->fesl_socket->socket, (char*)&recvbuf[0], sizeof(recvbuf), 0);
 			if (r <= 0) {
@@ -274,9 +198,7 @@ int SSL_LogicThread(FESLCtx* ctx) {
 				break;
 			}
 			ctx->ssl_state->recv_expected_len += sr;
-			show_dump((unsigned char*)&ctx->ssl_state->recv_buffer[ctx->ssl_state->recv_buffer_cursor], sr, console_fd);
 		}
-		fflush(console_fd);
 	}
 	SSL_Flush(ctx);
 	return ctx->connection_state;
@@ -314,19 +236,13 @@ int fesl_SSL_recv(FESLCtx* ctx, char* buf, int len) {
 			ctx->ssl_state->recv_current_len = 0;
 		}
 		result = read_len;
-		show_dump((unsigned char *)buf, read_len, console_fd);
 		
 	}
-	
-	fflush(console_fd);
 	if (result > 0 && result < len)
 		buf[result] = 0;
 	return result;
 }
 
-//int verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
-//	return 1;
-//}
 void install_fesl_patches() {
 	SSL_library_init();
 	OpenSSL_add_all_algorithms();

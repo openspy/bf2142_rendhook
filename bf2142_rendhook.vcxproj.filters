@@ -24,9 +24,6 @@
     <ClCompile Include="CDetour.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="FESL.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="FESL_impl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

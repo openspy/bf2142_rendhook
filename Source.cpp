@@ -19,10 +19,6 @@ struct {
 	char *sb;
 	char *sb_wildcard;
 
-	void **fesl_dns_address;
-
-	void **fesl_base_domain;
-
 	char *stella_hostname;
 	char *stella_http_name;
 
@@ -36,17 +32,6 @@ void patchString(char *dstAddress, char *srcAddress) {
 
 	VirtualProtect(dstAddress, strlen(dstAddress), old, &old);
 	FlushInstructionCache(GetCurrentProcess(), dstAddress, strlen(dstAddress));
-}
-void patchSSL() {
-	const char *update_string = "\xB8\x15\x00\x00\x00\xC3\xCC\xCC\xCC\xCC\xCC\xCC";
-	int instruction_length = 12;
-	void *instruction_address = (void *)0x860A87;
-	DWORD old;
-	VirtualProtect(instruction_address, instruction_length, PAGE_EXECUTE_READWRITE, &old);
-	WriteProcessMemory(GetCurrentProcess(), instruction_address, update_string, instruction_length, NULL);
-
-	VirtualProtect(instruction_address, instruction_length, old, &old);
-	FlushInstructionCache(GetCurrentProcess(), instruction_address, instruction_length);
 }
 void patchErrorNeg206() {
 	const char *update_string = "\xEB\x2E\x90";
@@ -73,7 +58,6 @@ void patchDeleteSoldierHang() {
 }
 #define BASE_ADDRESS 0x400000
 static int patched = false;
-const char *fesl_hostname = "fesl.openspy.net";
 
 //HMODULE original_dll;
 BOOL WINAPI DllMain(
@@ -89,8 +73,8 @@ BOOL WINAPI DllMain(
 		case DLL_THREAD_ATTACH:
 			if (!patched) {
 				patched = true;
-				AllocConsole();
-				console_fd = fopen("CONOUT$", "wb");
+				/*AllocConsole();
+				console_fd = fopen("CONOUT$", "wb");*/
 
 				
 				install_fesl_patches();
@@ -126,28 +110,9 @@ BOOL WINAPI DllMain(
 				//.rdata:00925424	0000000C	C	gamespy.com
 				patchString(sGameSpyInfo.gamespy_online_check, "openspy.net");
 
-				sGameSpyInfo.fesl_dns_address = (void **)0x833DB7;
+				patchErrorNeg206();
+				patchDeleteSoldierHang();
 
-				sGameSpyInfo.fesl_base_domain = (void **)0x8342CA;
-
-
-
-				patchString((char *)0x9C5C7C, ".open");
-				patchString((char *)0x9C5C74, "spy");
-				patchString((char *)0x9C5C78, "net");
-
-				patchSSL();
-				//patchErrorNeg206();
-				//patchDeleteSoldierHang();
-
-
-				VirtualProtect((void *)sGameSpyInfo.fesl_dns_address, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
-				WriteProcessMemory(GetCurrentProcess(), sGameSpyInfo.fesl_dns_address, (void *)&fesl_hostname, sizeof(void *), NULL);
-				VirtualProtect((void *)sGameSpyInfo.fesl_dns_address, sizeof(void *), old, &old);
-				FlushInstructionCache(GetCurrentProcess(), sGameSpyInfo.fesl_dns_address, sizeof(void *));
-
-
-				//OutputDebugString("Done patching hostnames...\n");
 
 			}
 
