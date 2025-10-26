@@ -7,7 +7,7 @@
 
 #include <openssl/ssl.h>
 
-#define SERVER_HOSTNAME "bf2142-pc.openspy.net"
+#define SERVER_HOSTNAME "fesl.openspy.net"
 #define SERVER_PORT 18301
 
 
@@ -235,15 +235,19 @@ void install_fesl_patches() {
 	SSL_load_error_strings();
 
 
-
 	g_ssl_ctx = SSL_CTX_new(TLS_method());
-	//SSL_CTX_set_verify(g_ssl_ctx, SSL_VERIFY_PEER, NULL); //call this to enable verification
+	SSL_CTX_set_verify(g_ssl_ctx, SSL_VERIFY_PEER, NULL); //call this to enable verification
 	SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_2_VERSION);
 	//SSL_CTX_set_max_proto_version(g_ssl_ctx, TLS1_3_VERSION);
+
+	//SSL_CTX_set_default_verify_paths(g_ssl_ctx);
+	SSL_CTX_load_verify_store(g_ssl_ctx, "org.openssl.winstore://");
 
 	SSL_CTX_set_cipher_list(g_ssl_ctx, "ALL");
 	SSL_CTX_set_options(g_ssl_ctx, SSL_OP_ALL);
 
+
+	//creating SSL connection ctx in this way assumes the game will only ever establish one SSL connection at a time... but it saves us dealing with memory cleanup
 	g_ssl = SSL_new(g_ssl_ctx);
 	g_read_bio = BIO_new(BIO_s_mem());
 	g_write_bio = BIO_new(BIO_s_mem());
