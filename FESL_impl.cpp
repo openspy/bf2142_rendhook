@@ -85,6 +85,10 @@ void SSL_Flush(FESLCtx* ctx) {
 	if (ssl_write_sz > 0) {
 		BIO_read(g_write_bio, &ctx->ssl_state->send_buffer, ssl_write_sz);
 
+		if (ssl_write_sz > sizeof(ctx->ssl_state->send_buffer)) {
+			ssl_write_sz = sizeof(ctx->ssl_state->send_buffer);
+		}
+
 		int r = send(ctx->fesl_socket->socket, (const char*)&ctx->ssl_state->send_buffer, ssl_write_sz, 0);
 		if (r < 0) {
 			ctx->connection_state = 4099;
@@ -245,24 +249,8 @@ void install_fesl_patches() {
 	X509_STORE* store = X509_STORE_new();
 	X509_STORE_set_default_paths(store); //load default openssl cas
 	X509_STORE_load_store(store, "org.openssl.winstore://"); //load certs trusted by windows
-
-	//add sectigo root chain... as R46,DVR36 are currently not in the windows cert store...
-	const unsigned char* ca_bundle = CA_USERTRUST;
-	X509* ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_USERTRUST));
-	X509_STORE_add_cert(store, ca_cert);
-	X509_free(ca_cert);
-
-	ca_bundle = CA_SECTIGO_R46;
-	ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_SECTIGO_R46));
-	X509_STORE_add_cert(store, ca_cert);
-	X509_free(ca_cert);
-
-	ca_bundle = CA_SECTIGO_DVR36;
-	ca_cert = d2i_X509(NULL, &ca_bundle, sizeof(CA_SECTIGO_DVR36));
-	X509_STORE_add_cert(store, ca_cert);
-	X509_free(ca_cert);
-
 	SSL_CTX_set_cert_store(g_ssl_ctx, store);
+
 	//
 
 	SSL_CTX_set_cipher_list(g_ssl_ctx, "ALL");
